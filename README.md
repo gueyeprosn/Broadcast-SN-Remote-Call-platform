@@ -26,7 +26,7 @@ vérifiable par les commandes de la section « Vérifier ».
 | Docker, Nginx | fournis, syntaxe validée, **jamais construits** |
 | Sortie NDI / SRT | **non implémentée** |
 
-Tests exécutés : **220 assertions automatisées, 220 réussies**, campagnes rejouées
+Tests exécutés : **234 assertions automatisées, 234 réussies**, campagnes rejouées
 plusieurs fois de suite avec le même résultat.
 Rapport détaillé, avec ce qui n'a **pas** été exécuté et pourquoi :
 [`docs/10-TEST-REPORT.md`](docs/10-TEST-REPORT.md).
@@ -226,6 +226,7 @@ Pas des recommandations : des refus.
 | Journal d'audit des actions **réussies et refusées** | `src/server/services/audit.ts` |
 | Purge planifiée par secret dédié, refus de démarrage sans secret | `app/api/admin/retention/`, `deploy/scheduler/purge.sh` |
 | Refus de page renvoyé proprement, sans révéler l'existence d'une session | `src/server/auth/guard.ts` |
+| Changer son mot de passe exige le mot de passe actuel ; les autres sessions tombent | `app/api/account/password/route.ts` |
 | Journaux applicatifs avec masquage des champs sensibles | `src/lib/logger.ts` |
 
 `npm audit --omit=dev` → **0 vulnérabilité** sur les dépendances d'exécution.

@@ -57,12 +57,18 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           </nav>
         </div>
         <div className="flex items-center gap-3">
-          <div className="text-right leading-tight">
+          {/* Accessible à tous les rôles : un technicien n'a aucun écran
+              d'administration, il doit pourtant pouvoir changer son mot de passe. */}
+          <Link
+            href="/account"
+            title="Mon compte"
+            className="rounded px-2 py-1 text-right leading-tight transition-colors hover:bg-surface2"
+          >
             <p className="text-xs text-txt">{user.displayName}</p>
             <p className="text-2xs uppercase tracking-wider text-txt2">
               {ROLE_LABEL[user.role] ?? user.role}
             </p>
-          </div>
+          </Link>
           <LogoutButton>
             <LogOut size={13} />
           </LogoutButton>

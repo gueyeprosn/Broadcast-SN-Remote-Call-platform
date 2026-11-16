@@ -157,8 +157,14 @@ cd /opt/snrc/deploy && docker compose exec -e SEED_ADMIN_EMAIL=vous@exemple.org 
 
 Si le script de seed n'est pas disponible dans l'image, créez le compte depuis une
 machine ayant accès à la base, ou ajoutez temporairement `prisma/seed.ts` au conteneur.
-Connectez-vous ensuite et créez les comptes réalisateur et technicien depuis
-`Admin → Utilisateurs`.
+Connectez-vous ensuite, **changez immédiatement ce mot de passe** depuis
+`Mon compte` (en haut à droite), puis videz `SEED_ADMIN_PASSWORD` : la variable ne
+sert qu'au script de création et une valeur périmée qui traîne finit par induire en
+erreur. Créez enfin les comptes réalisateur et technicien depuis `Admin → Utilisateurs`.
+
+> « Mon compte » est accessible à **tous les rôles**, y compris un technicien qui n'a
+> aucun écran d'administration. Le mot de passe actuel y est exigé, et le changement
+> déconnecte toutes les autres sessions du compte.
 
 ### 2.6 Ce que la pile expose
 

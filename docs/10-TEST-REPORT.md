@@ -15,12 +15,12 @@
 | Compilation de production | `npm run build` | **36 routes** ✅ |
 | Intégration de l'API | `bash tests/e2e-api.sh` | **84 / 84** ✅ |
 | Intégration vMix (simulateur) | `bash tests/e2e-vmix.sh` | **43 / 43** ✅ |
-| Rétention des données et refus de pages | `bash tests/e2e-retention.sh` | **55 / 55** ✅ |
+| Rétention, refus de pages, mot de passe | `bash tests/e2e-retention.sh` | **69 / 69** ✅ |
 | Audit des dépendances d'exécution | `npm audit --omit=dev` | **0 vulnérabilité** ✅ |
 | Image Docker / Nginx | — | **NON EXÉCUTÉ** (Docker absent) |
 | Essais navigateurs et vMix Windows | — | **NON EXÉCUTÉ** (matériel requis) |
 
-**Total exécuté : 220 assertions automatisées, 220 réussies.**
+**Total exécuté : 234 assertions automatisées, 234 réussies.**
 Les campagnes d'intégration ont été rejouées plusieurs fois de suite sur la même
 base, avec le même résultat : elles sont idempotentes et utilisables en CI.
 
@@ -162,7 +162,7 @@ sert qu'un seul correspondant à la fois.
 
 ---
 
-## 4. Rétention des données et refus de pages — 55 assertions
+## 4. Rétention, refus de pages et mot de passe — 69 assertions
 
 `bash tests/e2e-retention.sh`
 
@@ -173,6 +173,7 @@ temps : attendre 30 jours n'est pas une option.
 |---|---|---|
 | 2. Autorisations (API) | 8 | état et purge **refusés à un réalisateur** (403) et à un anonyme (401) ; faux secret de planificateur → 401 **journalisé**, et le secret présenté n'apparaît pas dans le journal |
 | 2b. Refus de pages | 6 | un réalisateur sur une page d'administration est **renvoyé (307)** vers les productions avec le motif, pas servi une erreur ; un anonyme va vers `/login` ; **une session inexistante et une session interdite donnent exactement la même réponse** |
+| 2c. Mot de passe personnel | 14 | « Mon compte » ouvert à un **réalisateur** ; mot de passe actuel erroné, trop court, ou identique à l'ancien → refusés ; le passer par la route Utilisateurs est **refusé** (`use_account_route`) ; après changement l'ancien ne marche plus, le nouveau si, **la session de l'auteur reste ouverte** avec un cookie rafraîchi portant le nouvel `epoch` ; succès et refus journalisés, **aucun mot de passe en clair dans le journal** |
 | 3. Politique | 3 | la politique annoncée est cohérente, et l'écran affiche laquelle est en vigueur |
 | 4. Jeu d'essai | 8 | session due, session en attente, session terminée **sans date de purge**, session « en direct » depuis 3 jours, compteur de limitation expiré, ligne d'audit de 5 ans |
 | 5. Purge administrateur | 5 | au moins une session supprimée, au moins une date réparée, compteur purgé |
@@ -191,7 +192,7 @@ branches ont été exécutées :
 | `AUDIT_RETENTION_DAYS=0` (défaut) | la ligne d'audit de 5 ans est **conservée**, `deletedAuditRows = 0` |
 | `AUDIT_RETENTION_DAYS=365` | la ligne de 5 ans est **supprimée**, `deletedAuditRows ≥ 1` |
 
-Vérifié en redémarrant le serveur avec chaque réglage. 55 / 55 dans les deux cas,
+Vérifié en redémarrant le serveur avec chaque réglage. 69 / 69 dans les deux cas,
 deux passages consécutifs chacun.
 
 ### Arithmétique horaire du planificateur
@@ -225,6 +226,26 @@ du refus, et par `pageAccessDenied()` pour les erreurs d'accès remontées par l
 services. Les six pages concernées ont été basculées. Au passage, une session
 inexistante et une session appartenant à un autre réalisateur donnent désormais la
 **même** réponse : distinguer les deux révélerait qu'une session existe.
+
+### Changer son mot de passe : un trou fonctionnel, et un faux positif
+
+L'écran Utilisateurs masquait **toutes** les actions sur la ligne de l'utilisateur
+courant, y compris la réinitialisation du mot de passe. Un administrateur ne pouvait
+donc pas changer le sien depuis l'interface ; les autres rôles, qui n'ont accès à
+aucun écran d'administration, encore moins.
+
+Corrigé par une page « Mon compte » ouverte à **tout utilisateur authentifié**, et une
+route dédiée qui exige le mot de passe **actuel** — un poste laissé ouvert ne doit pas
+permettre de verrouiller son titulaire dehors. Le chemin plus faible qui subsistait
+dans la route Utilisateurs (changer son propre mot de passe sans le connaître) a été
+fermé.
+
+Une assertion a d'abord échoué : « la session de l'auteur reste ouverte » renvoyait
+307. Vérification faite, l'application était correcte — le cookie rafraîchi portait
+bien `epoch: 1`, comme la base. C'est mon enchaînement de test qui rejouait une
+connexion avec un mot de passe déjà changé. Corrigé en passant `-c` à curl, comme un
+navigateur enregistre un cookie, et une assertion compare désormais l'`epoch` du
+cookie à celui de la base.
 
 ### Un défaut de mon propre script de test
 

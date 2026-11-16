@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { KeyRound, Plus, UserCheck, UserX } from 'lucide-react'
 import { Badge, Button, Field, Input, Notice, Panel, Select } from '@/components/ui'
@@ -121,7 +122,20 @@ export function UsersAdmin({
                   )}
                 </td>
                 <td className="px-3 py-2 text-right">
-                  {canManage && user.id !== currentUserId && (
+                  {user.id === currentUserId ? (
+                    // Sur sa propre ligne : pas de désactivation ni de
+                    // rétrogradation — mais le changement de mot de passe doit
+                    // rester accessible. Il passe par « Mon compte », qui exige
+                    // le mot de passe actuel.
+                    <Link
+                      href="/account"
+                      className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line bg-surface2 px-2 text-xs text-txt transition-colors hover:bg-line"
+                      title="Changer mon mot de passe"
+                    >
+                      <KeyRound size={12} /> Mon mot de passe
+                    </Link>
+                  ) : (
+                    canManage && (
                     <div className="flex justify-end gap-1">
                       <Button
                         size="sm"
@@ -159,6 +173,7 @@ export function UsersAdmin({
                         {user.isActive ? <UserX size={12} /> : <UserCheck size={12} />}
                       </Button>
                     </div>
+                    )
                   )}
                 </td>
               </tr>

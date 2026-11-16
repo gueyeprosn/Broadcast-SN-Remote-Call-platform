@@ -41,6 +41,19 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         'self_lockout',
       )
     }
+
+    // Changer SON mot de passe passe par /api/account/password, qui exige le mot
+    // de passe actuel. Cette route-ci est une *réinitialisation* par un
+    // administrateur sur le compte d'un tiers : elle ne doit pas offrir un
+    // chemin plus faible pour son propre compte.
+    if (target.id === actor.id && body.password !== undefined) {
+      return problem(
+        409,
+        'Pour changer votre propre mot de passe, utilisez « Mon compte » : ' +
+          'le mot de passe actuel y est exigé.',
+        'use_account_route',
+      )
+    }
     if (target.role === 'ADMIN' && (body.isActive === false || (body.role && body.role !== 'ADMIN'))) {
       const remaining = await db.user.count({
         where: { role: 'ADMIN', isActive: true, id: { not: target.id } },

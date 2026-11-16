@@ -92,6 +92,42 @@ chk "session inexistante et session interdite : meme reponse" ok "$(python3 -c "
 import sys
 print('ok' if sys.argv[1] == sys.argv[2] else f'{sys.argv[1]} != {sys.argv[2]}')" "$(redir "$JD" /control/inexistant-00000)" "$(redir "$JD" /control/cm00000000000000000000000)")"
 
+echo "── 2c. Changement de son propre mot de passe"
+# Tout le monde doit pouvoir changer son mot de passe, y compris un rôle sans
+# aucun écran d'administration. Et le mot de passe ACTUEL doit être exigé :
+# sinon un poste laissé ouvert permet de verrouiller son titulaire dehors.
+DIR_ID=$(curl -s -b "$JD" $B/api/auth/me | j user.id)
+PW_NEW="motdepasse-change-$$"
+pwbody() { python3 -c 'import json,sys;print(json.dumps({"currentPassword":sys.argv[1],"newPassword":sys.argv[2]}))' "$1" "$2"; }
+
+chk "page Mon compte accessible a un realisateur" 200 "$(code -b "$JD" $B/account)"
+chk "page Mon compte refusee a un anonyme" 307 "$(code $B/account)"
+chk "mot de passe actuel errone -> refus" "bad_current_password" "$(curl -s -b "$JD" -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(pwbody 'pas-le-bon-mot-de-passe' "$PW_NEW")")" $B/api/account/password | j error.code)"
+chk "nouveau mot de passe trop court -> refus" 400 "$(code -b "$JD" -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(pwbody "$DIR_PW" 'court')")" $B/api/account/password)"
+chk "nouveau identique a l'actuel -> refus" "unchanged_password" "$(curl -s -b "$JD" -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(pwbody "$DIR_PW" "$DIR_PW")")" $B/api/account/password | j error.code)"
+chk "changer son mot de passe par la route Utilisateurs est refuse" "use_account_route" "$(curl -s -b "$J" -X PATCH -H 'Content-Type: application/json' --data-binary "$(body "$(python3 -c 'import json;print(json.dumps({"password":"peu-importe-la-valeur"}))')")" $B/api/users/$(curl -s -b "$J" $B/api/auth/me | j user.id) | j error.code)"
+
+# `-c` en plus de `-b` : le changement renvoie un cookie de session rafraîchi,
+# qu'un navigateur enregistre automatiquement. Sans `-c`, le bocal garderait
+# l'ancien jeton et la session paraîtrait fermée à tort.
+chk "changement accepte avec le bon mot de passe actuel" 200 "$(code -b "$JD" -c "$JD" -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(pwbody "$DIR_PW" "$PW_NEW")")" $B/api/account/password)"
+chk "l'ancien mot de passe ne fonctionne plus" 401 "$(code -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(python3 -c 'import json,sys;print(json.dumps({"email":sys.argv[1],"password":sys.argv[2]}))' "$DIR_EMAIL" "$DIR_PW")")" $B/api/auth/login)"
+chk "le nouveau fonctionne" 200 "$(code -X POST -H 'Content-Type: application/json' --data-binary "$(body "$(python3 -c 'import json,sys;print(json.dumps({"email":sys.argv[1],"password":sys.argv[2]}))' "$DIR_EMAIL" "$PW_NEW")")" $B/api/auth/login)"
+chk "la session de l'auteur reste ouverte (cookie rafraichi)" 200 "$(code -b "$JD" $B/account)"
+chk "le cookie rafraichi porte le nouvel epoch" ok "$(python3 -c "
+import base64, json, sys
+tok = sys.argv[1].split('.')[1]
+tok += '=' * (-len(tok) % 4)
+epoch = json.loads(base64.urlsafe_b64decode(tok))['epoch']
+print('ok' if epoch == int(sys.argv[2]) else f'cookie={epoch} base={sys.argv[2]}')" \
+  "$(grep snrc_session "$JD" | awk '{print $7}')" \
+  "$(q "SELECT \"tokenEpoch\" FROM \"User\" WHERE email='$DIR_EMAIL'")")"
+chk "le changement est journalise" ok "$(q "SELECT count(*) FROM \"AuditLog\" WHERE action='account.password.change' AND outcome='ok'" | python3 -c "import sys;print('ok' if int(sys.stdin.read())>0 else 'aucun')")"
+chk "le refus est journalise aussi" ok "$(q "SELECT count(*) FROM \"AuditLog\" WHERE action='account.password.change' AND outcome='denied'" | python3 -c "import sys;print('ok' if int(sys.stdin.read())>0 else 'aucun')")"
+chk "aucun mot de passe en clair dans le journal" ok "$(q "SELECT count(*) FROM \"AuditLog\" WHERE detail::text LIKE '%$PW_NEW%' OR detail::text LIKE '%$DIR_PW%'" | sed 's/^0$/ok/')"
+# Le reste de la campagne réutilise ce cookie : il est toujours valide.
+DIR_PW=$PW_NEW
+
 echo "── 3. Politique annoncée"
 STATUS=$(curl -s -b "$J" $B/api/admin/retention)
 RET_DAYS=$(printf '%s' "$STATUS" | j status.policy.sessionDays)
