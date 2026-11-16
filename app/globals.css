@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Broadcast SN Remote Call — fondations visuelles.
+ * Interface de régie : dense, sombre, alignée, sans décoration gratuite.
+ */
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-bg text-txt antialiased;
+    font-feature-settings: 'tnum' 1, 'cv05' 1;
+  }
+
+  /* Chiffres tabulaires partout où une valeur change en direct : sans cela,
+     les mesures « sautent » latéralement à chaque rafraîchissement. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    @apply bg-accent/30;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent/70 ring-offset-2 ring-offset-bg;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-bg;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded bg-surface2;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-line;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-lg border border-line/70 bg-surface shadow-panel;
+  }
+
+  .panel-header {
+    @apply flex items-center justify-between gap-3 border-b border-line/70 px-3 py-2;
+  }
+
+  .panel-title {
+    @apply text-2xs font-semibold uppercase tracking-[0.12em] text-txt2;
+  }
+
+  .metric-label {
+    @apply text-2xs uppercase tracking-[0.08em] text-txt2;
+  }
+
+  .metric-value {
+    @apply tabular text-sm text-txt;
+  }
+
+  /* Page de sortie vMix : aucun habillage, fond laissé indéfini pour
+     permettre le canal alpha de vMix. */
+  .vmix-output,
+  .vmix-output body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    cursor: none;
+    user-select: none;
+    background: transparent;
+  }
+}
+
+/* Masque le curseur et toute barre de défilement dans la page de sortie. */
+.output-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: none;
+  user-select: none;
+  border: 0;
+}

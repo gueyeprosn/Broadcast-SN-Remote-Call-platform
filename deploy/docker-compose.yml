@@ -1,0 +1,141 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Broadcast SN Remote Call — déploiement Ubuntu 24.04
+#
+#   cd deploy
+#   cp .env.deploy.example .env
+#   # renseigner les secrets, puis :
+#   docker compose up -d --build
+#
+# PostgreSQL n'expose aucun port sur l'hôte : il n'est joignable que par le
+# réseau interne de la pile. Seul Nginx publie 80 et 443.
+# ──────────────────────────────────────────────────────────────────────────────
+
+name: snrc
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-snrc}
+      POSTGRES_USER: ${POSTGRES_USER:-snrc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
+      # Les sauvegardes et la restauration dépendent d'un encodage stable.
+      POSTGRES_INITDB_ARGS: '--encoding=UTF8 --locale=C'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./backup:/backup
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-snrc} -d ${POSTGRES_DB:-snrc}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+    # Aucun `ports:` — volontaire. La base n'est pas joignable depuis l'hôte.
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_URL: ${APP_URL:?APP_URL est obligatoire et doit être en HTTPS}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-snrc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-snrc}?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET est obligatoire}
+      MEDIA_SECRET: ${MEDIA_SECRET:?MEDIA_SECRET est obligatoire}
+      MEDIA_ENGINE_ORIGIN: ${MEDIA_ENGINE_ORIGIN:-https://vdo.ninja}
+      MEDIA_ENGINE_ID: ${MEDIA_ENGINE_ID:-vdoninja}
+      VMIX_AGENT_TOKEN: ${VMIX_AGENT_TOKEN:-}
+      STUN_URLS: ${STUN_URLS:-}
+      RETENTION_DAYS: ${RETENTION_DAYS:-30}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-0}
+      CRON_SECRET: ${CRON_SECRET:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    networks: [internal]
+    # Aucun `ports:` — l'application n'est atteignable qu'à travers Nginx.
+    logging:
+      driver: json-file
+      options: { max-size: '20m', max-file: '5' }
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [app]
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/snrc.conf:/etc/nginx/conf.d/snrc.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - certbot-webroot:/var/www/certbot
+    environment:
+      SERVER_NAME: ${SERVER_NAME:?SERVER_NAME est obligatoire}
+    # `envsubst` sur le seul nom de domaine, puis démarrage.
+    command: >
+      /bin/sh -c "envsubst '$$SERVER_NAME' < /etc/nginx/conf.d/snrc.conf > /etc/nginx/conf.d/default.conf
+      && rm -f /etc/nginx/conf.d/snrc.conf
+      && nginx -g 'daemon off;'"
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: { max-size: '20m', max-file: '5' }
+
+  # Purge quotidienne des données hors période de conservation.
+  # Appelle l'application par le réseau interne : la route n'a pas besoin d'être
+  # joignable depuis l'extérieur pour que la purge fonctionne.
+  # Retirez ce service si vous préférez déclencher la purge autrement.
+  scheduler:
+    image: curlimages/curl:8.11.1
+    restart: unless-stopped
+    depends_on: [app]
+    environment:
+      RETENTION_URL: http://app:3000/api/admin/retention
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET est obligatoire pour la purge planifiée}
+      PURGE_AT: ${PURGE_AT:-04:17}
+    volumes:
+      - ./scheduler/purge.sh:/purge.sh:ro
+    entrypoint: ['/bin/sh', '/purge.sh']
+    networks: [internal]
+    logging:
+      driver: json-file
+      options: { max-size: '5m', max-file: '3' }
+
+  # Sauvegarde quotidienne de la base, conservée 14 jours.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-snrc}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-snrc}
+    volumes:
+      - ./backup:/backup
+    entrypoint: >
+      /bin/sh -c "while true; do
+        f=/backup/snrc-$$(date +%%Y%%m%%d-%%H%%M%%S).sql.gz;
+        if pg_dump --no-owner | gzip > $$f; then
+          echo \"[backup] $$f\";
+        else
+          echo '[backup] ECHEC' >&2; rm -f $$f;
+        fi;
+        find /backup -name 'snrc-*.sql.gz' -mtime +14 -delete;
+        sleep 86400;
+      done"
+    networks: [internal]
+
+volumes:
+  db-data:
+  certbot-webroot:
+
+networks:
+  internal:
+    driver: bridge

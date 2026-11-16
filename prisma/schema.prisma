@@ -1,0 +1,370 @@
+// Broadcast SN Remote Call — schéma de données
+// Politique : aucun média n'est stocké. Seules les métadonnées de production,
+// les états de connexion et les journaux d'audit sont persistés.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 : l'URL de connexion vit dans prisma.config.ts (migrations) et dans
+// l'adaptateur passé au constructeur PrismaClient (runtime). Elle n'est plus ici.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────────────────────────────────────────── Utilisateurs ──
+
+enum Role {
+  ADMIN
+  DIRECTOR
+  TECHNICIAN
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  displayName  String
+  passwordHash String // scrypt, format "scrypt$N$r$p$salt$hash"
+  role         Role      @default(DIRECTOR)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  // Incrémenté à chaque changement de mot de passe ou désactivation :
+  // invalide immédiatement toutes les sessions existantes.
+  tokenEpoch   Int       @default(0)
+  failedLogins Int       @default(0)
+  lockedUntil  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  productions   Production[]
+  createdInvite Invitation[]  @relation("InvitationCreatedBy")
+  auditLogs     AuditLog[]
+  vmixConns     VmixConnection[]
+
+  @@index([role])
+}
+
+// ──────────────────────────────────────────────────────────────── Productions ──
+
+model Production {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  // Profil qualité par défaut proposé aux correspondants de cette production.
+  defaultQualityProfile QualityProfile @default(BROADCAST)
+  isArchived  Boolean  @default(false)
+  ownerId     String
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sessions Session[]
+
+  @@index([ownerId, isArchived])
+}
+
+// ─────────────────────────────────────────────────────────────────── Sessions ──
+
+enum SessionState {
+  SCHEDULED
+  LIVE
+  ENDED
+}
+
+enum QualityProfile {
+  ECONOMY // 360p
+  STANDARD // 480p
+  BROADCAST // 720p
+  HIGH // 1080p
+}
+
+model Session {
+  id           String       @id @default(cuid())
+  productionId String
+  production   Production   @relation(fields: [productionId], references: [id], onDelete: Cascade)
+  name         String
+  state        SessionState @default(SCHEDULED)
+
+  // Nom de salle du moteur média. Opaque : ne contient jamais le nom de l'émission,
+  // car il circule dans les URL du moteur.
+  roomName   String @unique
+  // Secret de salle, utilisé comme &password côté moteur.
+  roomSecret String
+
+  // Identifiant de flux du bus de retour programme publié par /return/<id>.
+  returnStreamId String @unique
+
+  // Incrémenté pour invalider d'un coup tous les cookies participants.
+  tokenEpoch Int @default(0)
+
+  scheduledAt DateTime?
+  startedAt   DateTime?
+  endedAt     DateTime?
+  // Suppression automatique des données de session après cette date (rétention).
+  purgeAfter  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants Participant[]
+  invitations  Invitation[]
+  events       ConnectionEvent[]
+  mappings     VmixInputMapping[]
+
+  @@index([productionId, state])
+  @@index([state, purgeAfter])
+}
+
+// ─────────────────────────────────────────────────────────────── Participants ──
+
+enum ParticipantState {
+  INVITED
+  READY // lien ouvert, salle de préparation
+  CONNECTING
+  LIVE
+  DISCONNECTED
+  REVOKED
+}
+
+enum ParticipantRole {
+  CORRESPONDENT
+  GUEST
+  CONTRIBUTOR
+}
+
+model Participant {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     Session          @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  displayName String
+  role        ParticipantRole  @default(CORRESPONDENT)
+  state       ParticipantState @default(INVITED)
+
+  // IMMUABLE pour la durée de la session : garantit qu'une entrée vMix retrouve
+  // le même correspondant après un rafraîchissement de page.
+  streamId  String @unique
+  // Clé publique opaque de la page /output/<outputKey>. Distincte du streamId.
+  outputKey String @unique
+
+  qualityProfile QualityProfile @default(BROADCAST)
+
+  // Décision de la régie — jamais déduite de l'état WebRTC.
+  onAir     Boolean @default(false)
+  onAirSource OnAirSource @default(MANUAL)
+
+  // Autorisations accordées par la régie (évaluées côté serveur, pas dans l'UI).
+  micAllowed    Boolean @default(true)
+  cameraAllowed Boolean @default(true)
+
+  // Bus de retour vMix affecté (M, A..G) ou null si retour commun.
+  returnBus String?
+
+  // Dernières mesures connues (écrites par la console, lecture seule ailleurs).
+  lastSeenAt   DateTime?
+  lastMetrics  Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  invitations Invitation[]
+  endpoints   MediaEndpoint[]
+  events      ConnectionEvent[]
+  mappings    VmixInputMapping[]
+
+  @@index([sessionId, state])
+}
+
+enum OnAirSource {
+  MANUAL
+  VMIX
+}
+
+// ──────────────────────────────────────────────────────────────── Invitations ──
+
+model Invitation {
+  id            String      @id @default(cuid())
+  sessionId     String
+  session       Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  // SHA-256 du jeton. Le jeton en clair n'est affiché qu'une fois et n'est
+  // jamais stocké : un vol de base ne permet pas de rejoindre une session.
+  tokenHash String  @unique
+  // 8 premiers caractères du jeton, pour que la régie reconnaisse un lien.
+  tokenHint String
+
+  expiresAt DateTime
+  maxUses   Int       @default(5)
+  usedCount Int       @default(0)
+  revokedAt DateTime?
+  lastUsedAt DateTime?
+  lastUsedIp String?
+
+  createdById String
+  createdBy   User   @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([participantId])
+  @@index([expiresAt])
+}
+
+// ────────────────────────────────────────────────────────────── Points média ──
+
+enum EndpointKind {
+  PUBLISH // lien du correspondant
+  VIEW // lien de réception isolé (vMix)
+  RETURN // bus de retour programme
+  DIRECTOR // canal de supervision
+  NDI // réservé — non implémenté
+  SRT // réservé — non implémenté
+}
+
+model MediaEndpoint {
+  id            String      @id @default(cuid())
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  kind          EndpointKind
+  // Identifiant du moteur ayant produit cet endpoint ("vdoninja", ...).
+  engineId      String
+  // URL calculée, conservée pour l'audit et le diagnostic.
+  // Les secrets de salle n'y figurent pas : ils sont réinjectés à la volée.
+  urlTemplate   String
+  createdAt     DateTime    @default(now())
+
+  @@unique([participantId, kind])
+}
+
+// ───────────────────────────────────────────────────────────────────── vMix ──
+
+enum VmixMode {
+  DIRECT // le serveur joint vMix (adresse privée obligatoire)
+  AGENT // via l'agent local sur le PC de régie
+}
+
+model VmixConnection {
+  id    String   @id @default(cuid())
+  label String
+  host  String
+  port  Int      @default(8088)
+  mode  VmixMode @default(AGENT)
+
+  // Secret partagé avec l'agent. Stocké chiffré au repos par l'application.
+  agentTokenHash String?
+
+  // Garde-fous explicites, désactivés par défaut.
+  allowAddInput       Boolean @default(false)
+  allowProgramControl Boolean @default(false)
+
+  // Bus déclarés comme bus de RETOUR : BusXSendToMaster y est refusé.
+  returnBuses String[] @default([])
+
+  lastCheckedAt DateTime?
+  lastStatus    String? // "ok" | message d'erreur réel, jamais inventé
+  vmixVersion   String?
+  vmixEdition   String?
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mappings VmixInputMapping[]
+
+  @@unique([host, port])
+}
+
+model VmixInputMapping {
+  id           String         @id @default(cuid())
+  connectionId String
+  connection   VmixConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  sessionId    String
+  session      Session        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant  Participant    @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  // GUID vMix (attribut `key` du XML) — stable, contrairement au numéro.
+  inputKey    String
+  inputNumber Int?
+  inputTitle  String?
+
+  lastNavigatedAt DateTime?
+  lastError       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([connectionId, inputKey])
+  @@unique([participantId, connectionId])
+  @@index([sessionId])
+}
+
+// ─────────────────────────────────────────────────────── Événements & audit ──
+
+enum ConnectionEventType {
+  JOIN_REQUESTED
+  CONNECTED
+  DISCONNECTED
+  RECONNECTED
+  MIC_CHANGED
+  CAMERA_CHANGED
+  ON_AIR_CHANGED
+  QUALITY_CHANGED
+  TALKBACK_OPENED
+  TALKBACK_CLOSED
+  MESSAGE_SENT
+  METRICS_ALERT
+  ERROR
+}
+
+model ConnectionEvent {
+  id            String              @id @default(cuid())
+  sessionId     String
+  session       Session             @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String?
+  participant   Participant?        @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  type          ConnectionEventType
+  message       String?
+  payload       Json?
+  createdAt     DateTime            @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([participantId, createdAt])
+}
+
+model AuditLog {
+  id       String  @id @default(cuid())
+  // null pour une action de correspondant (pas un User).
+  actorId  String?
+  actor    User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  actorKind String @default("user") // "user" | "participant" | "system"
+  actorLabel String?
+
+  action  String // "session.create", "vmix.navigate", "invitation.revoke", ...
+  target  String? // identifiant de l'objet visé
+  ip      String?
+  userAgent String?
+  // Résultat réel de l'action : une action refusée est journalisée aussi.
+  outcome String  @default("ok") // "ok" | "denied" | "error"
+  detail  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId, createdAt])
+  @@index([action, createdAt])
+}
+
+// Limitation de débit persistée (résiste au redémarrage, contrairement
+// à un compteur en mémoire).
+model RateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  windowEnd DateTime
+  @@index([windowEnd])
+}

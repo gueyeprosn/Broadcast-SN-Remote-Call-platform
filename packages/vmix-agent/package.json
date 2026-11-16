@@ -1,0 +1,13 @@
+{
+  "name": "snrc-vmix-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent local sécurisant l'accès à l'API HTTP de vMix depuis Broadcast SN Remote Call",
+  "type": "module",
+  "bin": { "snrc-vmix-agent": "./agent.mjs" },
+  "scripts": {
+    "start": "node agent.mjs"
+  },
+  "engines": { "node": ">=20.11" },
+  "dependencies": {}
+}

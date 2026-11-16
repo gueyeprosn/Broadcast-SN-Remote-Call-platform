@@ -1,0 +1,23 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+.DS_Store
+coverage/
+prisma/dev.db*
+tsconfig.tsbuildinfo
+next-env.d.ts
+packages/vmix-agent/node_modules/
+src/generated/
+deploy/.env
+# Les répertoires existent dans le dépôt (leur README documente ce qui s'y place
+# et le montage Docker les attend), mais leur contenu réel reste privé.
+deploy/certs/*
+!deploy/certs/README.md
+deploy/backup/*
+!deploy/backup/README.md
