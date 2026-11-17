@@ -25,10 +25,10 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
           <Brand size="sm" />
           <nav className="flex items-center gap-1 text-xs">
             <Link
-              href="/productions"
+              href="/"
               className="flex items-center gap-1.5 rounded px-2 py-1 text-txt2 transition-colors hover:bg-surface2 hover:text-txt"
             >
-              <Radio size={13} /> Productions
+              <Radio size={13} /> Régie
             </Link>
             {can(user.role, 'vmix.read') && (
               <Link

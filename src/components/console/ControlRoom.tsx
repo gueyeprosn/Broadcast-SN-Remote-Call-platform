@@ -19,6 +19,11 @@ const ALL_BUSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
 export function ControlRoom(props: ControlRoomProps) {
   const router = useRouter()
   const [participants, setParticipants] = useState(props.participants)
+  const [previousParticipants, setPreviousParticipants] = useState(props.participants)
+  if (previousParticipants !== props.participants) {
+    setPreviousParticipants(props.participants)
+    setParticipants(props.participants)
+  }
   const [events, setEvents] = useState<EventRow[]>(props.initialEvents)
   const [sessionState, setSessionState] = useState(props.session.state)
   const [talkbackOn, setTalkbackOn] = useState<string | null>(null)
@@ -385,7 +390,7 @@ export function ControlRoom(props: ControlRoomProps) {
             </Panel>
           ) : (
             <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-              {participants.map((participant) => (
+              {participants.filter((participant) => participant.state !== 'REVOKED').map((participant) => (
                 <CorrespondentCard
                   key={participant.id}
                   participant={participant}
@@ -405,21 +410,41 @@ export function ControlRoom(props: ControlRoomProps) {
 
         {/* ── Colonne de droite ──────────────────────────────────────────── */}
         <div className="flex min-h-0 flex-col gap-3 overflow-auto">
+          <details className="rounded-lg border border-line bg-surface p-3">
+          <summary className="cursor-pointer text-sm text-txt2">Retour programme</summary>
           <ProgramReturnPanel
             returnPublisherPath={props.returnPublisherPath}
             returnStreamId={props.session.returnStreamId}
             nativeMixMinus={props.capabilities.nativeMixMinus}
           />
+          </details>
 
           <InvitePanel
             sessionId={props.session.id}
             participants={participants}
             canInvite={may('invitation.create')}
             canAdd={may('participant.write')}
+            canRemove={may('invitation.revoke')}
+            onRemove={async (participant) => {
+              const response = await fetch(`/api/participants/${participant.id}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: 'Retiré depuis la liste des clients' }),
+              })
+              if (!response.ok) {
+                const data = await response.json() as { error?: { message?: string } }
+                throw new Error(data.error?.message ?? 'Retrait refusé.')
+              }
+              send({ action: 'hangup', target: participant.streamId, value: null })
+              setParticipants((list) => list.filter((client) => client.id !== participant.id))
+              router.refresh()
+            }}
             qualityProfiles={props.qualityProfiles}
             onChanged={() => router.refresh()}
           />
 
+          <details className="rounded-lg border border-line bg-surface p-3">
+          <summary className="cursor-pointer text-sm text-txt2">Connexion vMix et réglages techniques</summary>
           <VmixPanel
             sessionId={props.session.id}
             connections={props.vmixConnections}
@@ -455,6 +480,7 @@ export function ControlRoom(props: ControlRoomProps) {
               </ul>
             </Panel>
           )}
+          </details>
         </div>
       </div>
     </div>

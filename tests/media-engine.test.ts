@@ -31,6 +31,35 @@ test('l URL du correspondant est publish-only', () => {
   assert.equal(url.searchParams.has('cleanoutput'), true)
 })
 
+test('le lien correspondant demarre toujours seul, avec ou sans peripherique choisi', () => {
+  // Sans autostart, le moteur affiche SA page « Join Room with… » dans la
+  // vignette d'incrustation du correspondant : il croit la liaison ratee.
+  const sansPeripherique = new URL(
+    engine.publisherUrl({
+      ...base,
+      label: 'Test',
+      profile: QUALITY_PROFILES.BROADCAST,
+      micEnabled: true,
+      cameraEnabled: true,
+    }),
+  )
+  const avecPeripherique = new URL(
+    engine.publisherUrl({
+      ...base,
+      label: 'Test',
+      profile: QUALITY_PROFILES.BROADCAST,
+      micEnabled: true,
+      cameraEnabled: true,
+      videoDeviceId: 'cam-1',
+      audioDeviceId: 'mic-1',
+    }),
+  )
+  assert.equal(sansPeripherique.searchParams.has('autostart'), true)
+  assert.equal(avecPeripherique.searchParams.has('autostart'), true)
+  assert.equal(avecPeripherique.searchParams.get('videodevice'), 'cam-1')
+  assert.equal(avecPeripherique.searchParams.get('audiodevice'), 'mic-1')
+})
+
 test('le profil 480p utilise width/height car aucun palier quality ne l offre', () => {
   const url = new URL(
     engine.publisherUrl({

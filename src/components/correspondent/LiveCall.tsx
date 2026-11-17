@@ -6,6 +6,7 @@ import {
   CameraOff,
   Mic,
   MicOff,
+  MonitorPlay,
   PhoneOff,
   Radio,
   Volume2,
@@ -55,6 +56,8 @@ export function LiveCall({ payload, onLeave }: { payload: JoinPayload; onLeave: 
     rtt: number | null
   }>({ kbps: null, loss: null, rtt: null })
 
+  const [returnConnected, setReturnConnected] = useState(false)
+
   // L'état réseau est lu comme un magasin externe : pas de `setState` au montage.
   const online = useOnlineStatus()
 
@@ -79,16 +82,26 @@ export function LiveCall({ payload, onLeave }: { payload: JoinPayload; onLeave: 
     }, []),
   )
 
+  // Le retour programme est-il réellement reçu ? On le lit dans les
+  // statistiques du moteur (`total_inbound_connections`) plutôt que de le
+  // supposer : un écran noir peut aussi bien être un programme noir.
   const sendToReturn = useIframeBridge(
     returnRef,
     payload.engineOrigin,
-    useCallback(() => undefined, []),
+    useCallback((message: EngineMessage) => {
+      if (message.kind === 'stats') {
+        setReturnConnected(message.totals.inbound > 0)
+      }
+    }, []),
   )
 
   useEffect(() => {
-    const timer = setInterval(() => sendToPublisher({ getStats: true }), 3000)
+    const timer = setInterval(() => {
+      sendToPublisher({ getStats: true })
+      sendToReturn({ getStats: true })
+    }, 3000)
     return () => clearInterval(timer)
-  }, [sendToPublisher])
+  }, [sendToPublisher, sendToReturn])
 
   // ── Événements applicatifs ────────────────────────────────────────────────
   const sse = useAppEvents(
@@ -190,7 +203,12 @@ export function LiveCall({ payload, onLeave }: { payload: JoinPayload; onLeave: 
   const lossTone = quality.loss === null ? 'neutral' : quality.loss > 3 ? 'crit' : quality.loss > 1 ? 'warn' : 'ok'
 
   return (
-    <div className="flex min-h-screen flex-col bg-bg">
+    // `h-[100dvh]` et non `min-h-screen` : `dvh` suit la hauteur réellement
+    // visible, barre d'URL des navigateurs mobiles comprise. Avec `100vh`, les
+    // commandes du bas passent sous le bord de l'écran — exactement ce qui
+    // arrive au curseur de volume. Hauteur définie, aussi, pour que le `h-full`
+    // de l'iframe de retour ait une référence à laquelle se rapporter.
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-bg">
       {/* ── Bandeau d'état : la seule information vitale pour l'intervenant ── */}
       <header
         className={cn(
@@ -245,26 +263,43 @@ export function LiveCall({ payload, onLeave }: { payload: JoinPayload; onLeave: 
       )}
 
       {/* ── Retour programme en grand : c'est ce que l'intervenant regarde ── */}
-      <div className="relative min-h-0 flex-1 bg-black">
+      <div className="relative min-h-0 flex-1 overflow-hidden bg-black">
         <iframe
           ref={returnRef}
           src={payload.returnUrl}
           title="Retour programme"
           allow="autoplay"
-          className="h-full w-full border-0"
+          className="absolute inset-0 h-full w-full border-0"
         />
+
+        {/* Tant que la régie ne publie pas de retour, cette zone est un grand
+            rectangle noir que le correspondant interprète comme une panne. On
+            le dit, en s'appuyant sur une mesure réelle : le nombre de flux
+            entrants rapporté par le moteur, et non une supposition. */}
+        {!returnConnected && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center">
+            <MonitorPlay size={26} className="text-txt2" />
+            <p className="text-sm text-txt2">En attente du retour régie</p>
+            <p className="max-w-xs text-2xs text-txt2/70">
+              L&apos;écran reste noir tant que la régie n&apos;a pas démarré le retour
+              programme. Votre image et votre son, eux, partent déjà.
+            </p>
+          </div>
+        )}
+
         <p className="pointer-events-none absolute left-2 top-2 rounded bg-black/60 px-1.5 py-0.5 text-2xs uppercase tracking-wider text-white/80">
           Retour régie
         </p>
 
-        {/* Prévisualisation locale : l'iframe de publication, en incrustation. */}
-        <div className="absolute bottom-2 right-2 w-32 overflow-hidden rounded border border-line/70 bg-black shadow-panel sm:w-44">
+        {/* Prévisualisation locale, en incrustation. `max-w` en unités de vue :
+            sur un téléphone étroit, une largeur fixe déborderait du cadre. */}
+        <div className="absolute bottom-2 right-2 w-32 max-w-[38vw] overflow-hidden rounded border border-line/70 bg-black shadow-panel sm:w-44">
           <iframe
             ref={publisherRef}
             src={payload.publisherUrl}
             title="Votre caméra"
             allow="camera; microphone; autoplay"
-            className="aspect-video w-full border-0"
+            className="block aspect-video w-full border-0"
           />
         </div>
       </div>

@@ -26,7 +26,7 @@ export function LoginForm() {
         setError(data.error?.message ?? 'Connexion refusée.')
         return
       }
-      router.replace('/productions')
+      router.replace('/')
       router.refresh()
     } catch {
       setError('Le serveur est injoignable.')

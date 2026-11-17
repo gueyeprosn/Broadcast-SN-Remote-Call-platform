@@ -8,13 +8,14 @@ const nextConfig = {
   output: 'standalone',
   experimental: { serverActions: { bodySizeLimit: '1mb' } },
   async headers() {
+    const mediaOrigin = new URL(process.env.MEDIA_ENGINE_ORIGIN ?? 'https://vdo.ninja').origin
     const base = [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
       { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
       { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
       {
         key: 'Permissions-Policy',
-        value: 'camera=(self), microphone=(self), display-capture=(self), geolocation=()',
+        value: `camera=(self "${mediaOrigin}"), microphone=(self "${mediaOrigin}"), display-capture=(self), geolocation=()`,
       },
     ]
     return [

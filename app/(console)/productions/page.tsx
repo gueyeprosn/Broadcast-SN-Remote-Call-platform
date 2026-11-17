@@ -45,9 +45,12 @@ export default async function ProductionsPage({
   const refusal = refuse ? (REFUSAL[refuse] ?? 'Accès non autorisé.') : null
 
   return (
-    <main className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-[1fr_300px]">
+    <main className="mx-auto max-w-4xl space-y-8 px-4 py-8 sm:px-8">
       <div className="space-y-3">
-        <h1 className="text-sm font-semibold text-txt">Productions</h1>
+        <div className="mb-6 space-y-2">
+          <h1 className="text-2xl font-semibold text-txt">Mes émissions</h1>
+          <p className="text-sm text-txt2">Ouvrez une régie pour inviter vos correspondants et récupérer leurs liens vMix.</p>
+        </div>
 
         {refusal && <Notice tone="warn" title="Accès refusé">{refusal}</Notice>}
 
@@ -97,9 +100,10 @@ export default async function ProductionsPage({
             </div>
 
             {can(user.role, 'session.write') && (
-              <div className="mt-3 border-t border-line/60 pt-3">
+              <details className="mt-4 border-t border-line/60 pt-4" open={production.sessions.length === 0}>
+                <summary className="mb-3 cursor-pointer text-sm text-accent">Préparer une nouvelle édition</summary>
                 <NewSessionForm productionId={production.id} />
-              </div>
+              </details>
             )}
           </Panel>
         ))}
@@ -107,11 +111,16 @@ export default async function ProductionsPage({
 
       <aside className="space-y-3">
         {mayWrite && (
-          <Panel title="Nouvelle production">
+          <details className="rounded-lg border border-line bg-surface p-5" open={productions.length === 0}>
+            <summary className="cursor-pointer text-sm font-semibold text-accent">+ Créer une émission</summary>
+            <div className="mt-5 max-w-lg">
             <NewProductionForm />
-          </Panel>
+            </div>
+          </details>
         )}
-        <Panel title="Rappel">
+        <details className="text-sm text-txt2">
+          <summary className="cursor-pointer">Comment ça marche ?</summary>
+          <div className="mt-3">
           <ul className="space-y-2 text-xs text-txt2">
             <li>
               Une <strong className="text-txt">production</strong> est une émission
@@ -123,7 +132,8 @@ export default async function ProductionsPage({
               jamais réutilisés d&apos;une édition à l&apos;autre.
             </li>
           </ul>
-        </Panel>
+          </div>
+        </details>
       </aside>
     </main>
   )

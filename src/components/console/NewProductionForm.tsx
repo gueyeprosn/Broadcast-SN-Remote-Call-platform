@@ -51,6 +51,9 @@ export function NewProductionForm() {
           placeholder="Journal de 20h"
         />
       </Field>
+      <details className="rounded-md border border-line p-3">
+      <summary className="cursor-pointer text-sm text-txt2">Options de l’émission</summary>
+      <div className="mt-3 space-y-3">
       <Field label="Description" htmlFor="prod-desc">
         <Input
           id="prod-desc"
@@ -76,8 +79,10 @@ export function NewProductionForm() {
           ))}
         </Select>
       </Field>
+      </div>
+      </details>
       <Button type="submit" variant="primary" className="w-full" disabled={busy}>
-        {busy ? 'Création…' : 'Créer la production'}
+        {busy ? 'Création…' : 'Créer l’émission'}
       </Button>
     </form>
   )

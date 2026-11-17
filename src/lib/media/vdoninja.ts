@@ -114,7 +114,12 @@ export class VdoNinjaEngine implements MediaEngine {
       ['contenthint', ctx.profile.id === 'ECONOMY' ? 'motion' : 'detail'],
       ['videodevice', ctx.videoDeviceId],
       ['audiodevice', ctx.audioDeviceId],
-      ['autostart', ctx.videoDeviceId && ctx.audioDeviceId ? true : undefined],
+      // TOUJOURS autostart, que les périphériques aient été choisis ou non.
+      // Notre salle de préparation a déjà demandé l'autorisation et fait choisir
+      // caméra et micro. Sans ce paramètre, le moteur affiche SA propre page
+      // « Join Room with… », en anglais, dans la vignette d'incrustation de
+      // 176 px : le correspondant croit que la liaison a échoué.
+      ['autostart', true],
       ['videomute', ctx.cameraEnabled ? undefined : true],
       ['cleanoutput', true],
     ])
