@@ -9,6 +9,12 @@ const config: Config = {
   content: ['./app/**/*.{ts,tsx}', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
+      screens: {
+        // La régie tient en un écran seulement s'il y a la hauteur. En dessous,
+        // la page défile normalement : des colonnes à défilement imbriqué sur
+        // un portable 768 px cachent plus de contenu qu'elles n'en montrent.
+        tall: { raw: '(min-height: 860px)' },
+      },
       colors: {
         bg: '#0B111B',
         surface: '#151E2B',

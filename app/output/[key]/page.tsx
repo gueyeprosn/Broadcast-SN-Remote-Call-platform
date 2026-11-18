@@ -61,6 +61,12 @@ export default async function OutputPage({
 
   return (
     <div className="output-root">
+      {/* vMix n'applique le canal alpha que si le `<body>` n'a pas de couleur de
+          fond. La feuille de style globale en pose une (#0B111B) pour toute
+          l'application : on la neutralise ici, et seulement ici. Sans cela, la
+          transparence annoncée dans docs/05-VMIX-INTEGRATION.md ne fonctionne
+          pas, quels que soient les réglages côté vMix. */}
+      <style>{'html,body{background:transparent !important;}'}</style>
       <iframe
         src={url}
         title=""

@@ -1,10 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Megaphone, Play, Square, Wifi, WifiOff } from 'lucide-react'
+import {
+  AlertTriangle,
+  ChevronLeft,
+  Megaphone,
+  Play,
+  Square,
+  Wifi,
+  WifiOff,
+} from 'lucide-react'
 import { Badge, Button, Notice, Panel } from '@/components/ui'
-import { Brand } from '@/components/Brand'
 import { useAppEvents } from '@/components/useAppEvents'
 import { multiviewCss, useDirectorBridge } from './useDirectorBridge'
 import { CorrespondentCard, type CardActions } from './CorrespondentCard'
@@ -300,11 +308,20 @@ export function ControlRoom(props: ControlRoomProps) {
   }, [props.vmixConnections])
 
   return (
-    <div className="flex h-[calc(100vh-3rem)] flex-col">
+    <div className="flex min-h-[calc(100dvh-3rem)] flex-col tall:h-[calc(100dvh-3rem)]">
       {/* ── Barre supérieure ─────────────────────────────────────────────── */}
       <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-line/70 bg-surface2/50 px-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <Brand size="sm" className="hidden lg:flex" />
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Sortie de secours : depuis la régie, on doit pouvoir revenir à la
+              liste des émissions sans passer par la barre du haut. */}
+          <Link
+            href="/productions"
+            title="Revenir à mes émissions"
+            className="flex shrink-0 items-center gap-1 rounded px-1.5 py-1 text-2xs text-txt2 transition-colors hover:bg-surface2 hover:text-txt"
+          >
+            <ChevronLeft size={14} />
+            <span className="hidden sm:inline">Émissions</span>
+          </Link>
           <div className="min-w-0 border-l border-line/70 pl-3">
             <p className="truncate text-sm font-semibold text-txt">
               {props.session.productionName}
@@ -359,8 +376,8 @@ export function ControlRoom(props: ControlRoomProps) {
       )}
 
       {/* ── Corps ────────────────────────────────────────────────────────── */}
-      <div className="grid min-h-0 flex-1 gap-3 overflow-hidden p-3 xl:grid-cols-[1fr_360px]">
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto">
+      <div className="grid min-h-0 flex-1 gap-3 p-3 tall:overflow-hidden xl:grid-cols-[1fr_360px]">
+        <div className="flex min-h-0 flex-col gap-3 tall:overflow-auto">
           {/* Multiview — l'iframe director, déjà connectée à tous les invités. */}
           <Panel
             title="Multiview régie"
@@ -409,7 +426,7 @@ export function ControlRoom(props: ControlRoomProps) {
         </div>
 
         {/* ── Colonne de droite ──────────────────────────────────────────── */}
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto">
+        <div className="flex min-h-0 flex-col gap-3 tall:overflow-auto">
           <details className="rounded-lg border border-line bg-surface p-3">
           <summary className="cursor-pointer text-sm text-txt2">Retour programme</summary>
           <ProgramReturnPanel

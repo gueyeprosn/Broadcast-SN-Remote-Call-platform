@@ -1,22 +1,17 @@
 import { redirect } from 'next/navigation'
 import { currentUser } from '@/server/auth/guard'
-import { db } from '@/lib/db'
+import { activeSessionId } from '@/server/services/navigation'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * Racine : on ouvre la régie en cours s'il y en a une, sinon la liste des
+ * émissions. La même règle sert à décider si la barre de navigation affiche
+ * « Régie » — voir `activeSessionId`.
+ */
 export default async function Home() {
   const user = await currentUser()
   if (!user) redirect('/login')
-  const session = await db.session.findFirst({
-    where: {
-      state: { in: ['LIVE', 'SCHEDULED'] },
-      production: {
-        isArchived: false,
-        ...(user.role === 'DIRECTOR' ? { ownerId: user.id } : {}),
-      },
-    },
-    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-    select: { id: true },
-  })
-  redirect(session ? `/control/${session.id}` : '/productions')
+  const sessionId = await activeSessionId(user)
+  redirect(sessionId ? `/control/${sessionId}` : '/productions')
 }

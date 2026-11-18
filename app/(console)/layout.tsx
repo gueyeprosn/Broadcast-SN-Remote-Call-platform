@@ -1,9 +1,10 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { Eraser, LogOut, Radio, Settings2, Users } from 'lucide-react'
+import { Eraser, LibraryBig, LogOut, Radio, Settings2, Users } from 'lucide-react'
 import { Brand } from '@/components/Brand'
 import { LogoutButton } from '@/components/LogoutButton'
 import { currentUser } from '@/server/auth/guard'
+import { activeSessionId } from '@/server/services/navigation'
 import { can } from '@/lib/rbac'
 
 export const dynamic = 'force-dynamic'
@@ -18,18 +19,34 @@ export default async function ConsoleLayout({ children }: { children: React.Reac
   const user = await currentUser()
   if (!user) redirect('/login')
 
+  // « Régie » n'est proposé que s'il y a réellement une régie où aller. Sinon
+  // le lien renverrait vers la liste des émissions, en doublon de « Émissions »
+  // juste à côté — deux entrées pour la même page.
+  const sessionId = await activeSessionId(user)
+
   return (
     <div className="flex min-h-screen flex-col">
       <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-line/70 bg-surface px-4">
         <div className="flex items-center gap-6">
           <Brand size="sm" />
           <nav className="flex items-center gap-1 text-xs">
+            {/* L'entrée du produit : toutes les émissions, et la création d'une
+                nouvelle. Sans elle, la liste devenait inatteignable au clic dès
+                qu'une session existait. */}
             <Link
-              href="/"
+              href="/productions"
               className="flex items-center gap-1.5 rounded px-2 py-1 text-txt2 transition-colors hover:bg-surface2 hover:text-txt"
             >
-              <Radio size={13} /> Régie
+              <LibraryBig size={13} /> Émissions
             </Link>
+            {sessionId && (
+              <Link
+                href={`/control/${sessionId}`}
+                className="flex items-center gap-1.5 rounded px-2 py-1 text-txt2 transition-colors hover:bg-surface2 hover:text-txt"
+              >
+                <Radio size={13} /> Régie
+              </Link>
+            )}
             {can(user.role, 'vmix.read') && (
               <Link
                 href="/admin/vmix"
