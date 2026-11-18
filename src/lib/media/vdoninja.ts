@@ -137,6 +137,26 @@ export class VdoNinjaEngine implements MediaEngine {
       // soloChat, qui ouvre son propre chemin audio.
       ['cleanish', true],
       ['pushloudness', true],
+
+      // ── Multiview ──────────────────────────────────────────────────────────
+      // `&previewmode` bascule la salle du réalisateur dans la disposition
+      // « Preview », que la documentation décrit comme reflétant un lien
+      // `&scene=0` : les vidéos seules, sans les panneaux de commande par
+      // invité. C'est exactement le multiview recherché, et il reste sur LA
+      // MÊME connexion — aucun flux supplémentaire n'est demandé aux
+      // correspondants.
+      //
+      // Vérifié sur la page réelle : avec ces paramètres, `#directorlayout`
+      // passe en display:none, `#gridlayout` devient le conteneur visible, et
+      // il ne reste aucun bouton affiché. Une version antérieure injectait du
+      // CSS visant `#main` et `#mainmenu` — le premier est le `body`, le second
+      // n'existe pas : rien n'était masqué, et l'interface anglaise du moteur
+      // apparaissait par-dessus la nôtre.
+      ['previewmode', ctx.preview !== false],
+      ['cleandirector', true], // masque les liens d'invitation du moteur
+      ['hidesolo', true], // masque les liens solo
+      ['hidecodirectors', true],
+      ['nocontrols', true], // masque la barre de contrôle vidéo
     ])
     return `${this.origin}/?${query}`
   }

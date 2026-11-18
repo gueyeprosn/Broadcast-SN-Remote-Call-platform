@@ -126,6 +126,14 @@ export interface PublisherContext {
 export interface DirectorContext {
   roomName: string
   roomSecret: string
+  /**
+   * `true` (défaut) : disposition multiview, les vidéos seules.
+   * `false` : interface complète du moteur, avec ses propres commandes par
+   * invité. C'est la trappe de secours — si une commande de la console cessait
+   * de passer en pleine émission, l'opérateur doit pouvoir reprendre la main
+   * avec l'interface native plutôt que de rester sans rien.
+   */
+  preview?: boolean
 }
 
 export interface ReceiverContext {

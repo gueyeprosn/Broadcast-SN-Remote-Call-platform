@@ -113,6 +113,35 @@ test('le lien director porte le role director et pas de push', () => {
   assert.equal(url.searchParams.has('push'), false)
 })
 
+test('le multiview s obtient par parametres documentes, pas par CSS injecte', () => {
+  // Constate sur la page reelle : avec ces parametres, #directorlayout passe en
+  // display:none, #gridlayout devient le conteneur visible, et aucun bouton du
+  // moteur ne reste affiche.
+  const url = new URL(
+    engine.directorUrl({ roomName: base.roomName, roomSecret: base.roomSecret }),
+  )
+  for (const flag of ['previewmode', 'cleandirector', 'hidesolo', 'hidecodirectors', 'nocontrols']) {
+    assert.equal(url.searchParams.has(flag), true, `${flag} attendu sur le lien director`)
+  }
+})
+
+test('la trappe de secours rend l interface complete du moteur', () => {
+  // Si une commande de la console cessait de passer en pleine emission,
+  // l'operateur doit pouvoir reprendre la main avec l'interface native.
+  const url = new URL(
+    engine.directorUrl({
+      roomName: base.roomName,
+      roomSecret: base.roomSecret,
+      preview: false,
+    }),
+  )
+  assert.equal(url.searchParams.has('previewmode'), false)
+  // Le reste du nettoyage demeure : on ne veut pas des liens d'invitation du
+  // moteur, meme en mode secours.
+  assert.equal(url.searchParams.has('cleandirector'), true)
+  assert.equal(url.searchParams.get('director'), base.roomName)
+})
+
 test('le secret de salle est percent-encode', () => {
   const url = engine.publisherUrl({
     roomName: 'room',

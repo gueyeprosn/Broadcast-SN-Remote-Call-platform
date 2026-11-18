@@ -57,7 +57,10 @@ export interface EventRow {
 export interface ControlRoomProps {
   session: SessionSummary
   participants: ParticipantSummary[]
+  /** Canal de supervision en disposition multiview. */
   directorUrl: string
+  /** Même canal, interface complète du moteur : trappe de secours. */
+  directorFullUrl: string
   engineOrigin: string
   capabilities: EngineCapabilities
   userCapabilities: Capability[]

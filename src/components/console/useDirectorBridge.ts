@@ -76,10 +76,7 @@ export function useDirectorBridge(engineOrigin: string, statsIntervalMs = 2000) 
     }
   }, [send, statsIntervalMs])
 
-  /** Injecte la feuille de style du multiview dans l'iframe du moteur. */
-  const applyMultiviewStyle = useCallback((css: string) => send({ style: css }), [send])
-
-  return { frameRef, state, send, applyMultiviewStyle }
+  return { frameRef, state, send }
 }
 
 function reduce(state: DirectorBridgeState, message: EngineMessage): DirectorBridgeState {
@@ -157,37 +154,14 @@ function reduce(state: DirectorBridgeState, message: EngineMessage): DirectorBri
   }
 }
 
-/**
- * Feuille de style injectée dans l'iframe director pour en faire un multiview
- * propre : on masque l'habillage du moteur et on dispose les vidéos en grille.
- *
- * `{style: "<css>"}` est une commande documentée de l'API IFrame. On n'écrit
- * donc pas dans le DOM du moteur depuis l'extérieur — ce serait impossible,
- * l'origine est différente : on lui demande d'appliquer la règle lui-même.
- */
-export function multiviewCss(columns: number): string {
-  return [
-    '#header, #mainmenu, #translation, #chatModule, #mutespeakerbutton,',
-    '#mutebutton, #screensharebutton, #hangupbutton, #controlButtons, .advanced {',
-    '  display: none !important;',
-    '}',
-    'body { background: #0B111B !important; margin: 0 !important; }',
-    '#gridlayout, #main {',
-    '  display: grid !important;',
-    `  grid-template-columns: repeat(${Math.max(1, columns)}, minmax(0, 1fr)) !important;`,
-    '  gap: 6px !important;',
-    '  padding: 6px !important;',
-    '  width: 100% !important;',
-    '  box-sizing: border-box !important;',
-    '}',
-    'video {',
-    '  width: 100% !important;',
-    '  height: auto !important;',
-    '  aspect-ratio: 16 / 9;',
-    '  object-fit: cover;',
-    '  background: #000;',
-    '  border-radius: 4px;',
-    '  margin: 0 !important;',
-    '}',
-  ].join('\n')
-}
+// La mise en forme du multiview ne passe plus par une injection de CSS. Elle
+// est obtenue par les paramètres d'URL documentés du moteur — `&previewmode`,
+// `&cleandirector`, `&hidesolo`, `&hidecodirectors`, `&nocontrols` — dont
+// l'effet a été constaté sur la page réelle : `#directorlayout` masqué,
+// `#gridlayout` visible, aucun bouton affiché.
+//
+// La version précédente visait `#main` et `#mainmenu`. `#main` est le `body`
+// de la page du moteur, `#mainmenu` n'existe pas : la feuille ne masquait rien
+// et l'interface anglaise du moteur s'affichait par-dessus la nôtre. Styler le
+// balisage interne d'une application tierce était de toute façon une
+// dépendance que rien ne garantissait d'une version à l'autre.

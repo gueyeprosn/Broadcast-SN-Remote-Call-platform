@@ -50,9 +50,16 @@ export default async function ControlPage({
 
   // L'URL director contient le secret de salle : elle n'est construite que pour
   // un utilisateur déjà autorisé sur cette session, et n'est pas persistée.
+  // Deux URL pour la même connexion : la disposition multiview (défaut) et
+  // l'interface complète du moteur, que l'opérateur peut appeler en secours.
   const directorUrl = eng.directorUrl({
     roomName: session.roomName,
     roomSecret: session.roomSecret,
+  })
+  const directorFullUrl = eng.directorUrl({
+    roomName: session.roomName,
+    roomSecret: session.roomSecret,
+    preview: false,
   })
 
   const returnPublisherPath = `/return/${session.id}`
@@ -124,6 +131,7 @@ export default async function ControlPage({
           : null,
       }))}
       directorUrl={directorUrl}
+      directorFullUrl={directorFullUrl}
       engineOrigin={eng.origin}
       capabilities={eng.capabilities}
       userCapabilities={[...capabilitiesOf(user.role)]}

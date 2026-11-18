@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Badge, Button, Notice, Panel } from '@/components/ui'
 import { useAppEvents } from '@/components/useAppEvents'
-import { multiviewCss, useDirectorBridge } from './useDirectorBridge'
+import { useDirectorBridge } from './useDirectorBridge'
 import { CorrespondentCard, type CardActions } from './CorrespondentCard'
 import { InvitePanel } from './InvitePanel'
 import { VmixPanel } from './VmixPanel'
@@ -37,6 +37,9 @@ export function ControlRoom(props: ControlRoomProps) {
   const [talkbackOn, setTalkbackOn] = useState<string | null>(null)
   const [pending, setPending] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
+  // Secours : bascule vers l'interface native du moteur si une commande
+  // de la console cessait de passer en pleine émission.
+  const [engineUi, setEngineUi] = useState(false)
 
   const capabilities = props.userCapabilities
   const may = useCallback(
@@ -44,7 +47,7 @@ export function ControlRoom(props: ControlRoomProps) {
     [capabilities],
   )
 
-  const { frameRef, state: bridge, send, applyMultiviewStyle } = useDirectorBridge(
+  const { frameRef, state: bridge, send } = useDirectorBridge(
     props.engineOrigin,
   )
 
@@ -111,14 +114,11 @@ export function ControlRoom(props: ControlRoomProps) {
     }, []),
   )
 
-  // ── Multiview : la feuille de style est (ré)appliquée quand le nombre de
-  //    correspondants change, et après chaque connexion du canal director.
-  const liveCount = participants.filter((p) => p.state === 'LIVE').length
-  const columns = liveCount <= 1 ? 1 : liveCount <= 4 ? 2 : 3
-  useEffect(() => {
-    if (!bridge.directorReady) return
-    applyMultiviewStyle(multiviewCss(columns))
-  }, [bridge.directorReady, columns, applyMultiviewStyle])
+  // La mise en forme du multiview n'est plus faite par injection de CSS : elle
+  // vient des paramètres d'URL du moteur (`&previewmode` et compagnie), qui
+  // sont documentés et vérifiés. L'ancienne feuille injectée visait `#main` —
+  // qui est le `body` — et `#mainmenu`, qui n'existe pas : elle ne masquait
+  // rien, et l'interface anglaise du moteur s'affichait par-dessus la nôtre.
 
   // ── Remontée périodique des mesures vers le serveur ────────────────────────
   const runtimeRef = useRef(bridge.runtime)
@@ -383,16 +383,34 @@ export function ControlRoom(props: ControlRoomProps) {
             title="Multiview régie"
             bodyClassName="p-0"
             actions={
-              <span className="text-2xs text-txt2">
-                {bridge.totals.inbound} flux entrant
-                {bridge.totals.inbound > 1 ? 's' : ''} · salle {props.session.roomName}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-2xs text-txt2">
+                  {bridge.totals.inbound} flux entrant
+                  {bridge.totals.inbound > 1 ? 's' : ''} · salle {props.session.roomName}
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setEngineUi((v) => !v)}
+                  title={
+                    engineUi
+                      ? 'Revenir au multiview'
+                      : 'Afficher l’interface native du moteur — secours si une commande ne passe plus'
+                  }
+                >
+                  {engineUi ? 'Multiview' : 'Interface moteur'}
+                </Button>
+              </div>
             }
             className="min-h-[220px] shrink-0"
           >
             <iframe
               ref={frameRef}
-              src={props.directorUrl}
+              // La clé force le remontage : changer `src` sur une iframe déjà
+              // chargée ne recharge pas toujours, et le pont postMessage doit
+              // de toute façon être rétabli sur le nouveau document.
+              key={engineUi ? 'moteur' : 'multiview'}
+              src={engineUi ? props.directorFullUrl : props.directorUrl}
               title="Canal de supervision"
               allow="camera; microphone; autoplay; display-capture"
               className="h-[min(42vh,420px)] w-full border-0 bg-black"
