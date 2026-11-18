@@ -5,7 +5,19 @@ import { useRouter } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import { Button, Input } from '@/components/ui'
 
-export function NewSessionForm({ productionId }: { productionId: string }) {
+export function NewSessionForm({
+  productionId,
+  suggestion,
+}: {
+  productionId: string
+  /**
+   * Nom proposé, calculé à la date du jour **par le serveur** et transmis ici.
+   * Le calculer dans ce composant produirait une chaîne au rendu serveur et une
+   * autre à l'hydratation dès que les fuseaux diffèrent ou qu'on franchit
+   * minuit. Une date écrite en dur, elle, se périme le lendemain.
+   */
+  suggestion: string
+}) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
@@ -36,7 +48,7 @@ export function NewSessionForm({ productionId }: { productionId: string }) {
       <div className="flex gap-2">
         <Input
           aria-label="Nom de la session"
-          placeholder="Édition du 16 novembre"
+          placeholder={suggestion}
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={120}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { PlugZap, Plus } from 'lucide-react'
+import { PlugZap, Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Field, Input, Notice, Panel, Select } from '@/components/ui'
 
 const BUSES = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
@@ -68,6 +68,45 @@ export function VmixAdmin({
     router.refresh()
   }
 
+  /**
+   * Supprime une connexion. Le serveur refuse tant qu'une édition en cours ou
+   * préparée s'appuie dessus : on ne coupe pas le pilotage de vMix pendant un
+   * direct parce que quelqu'un range dans un autre onglet.
+   */
+  async function remove(connection: Connection) {
+    if (
+      !window.confirm(
+        `Supprimer la connexion « ${connection.label} » (${connection.host}:${connection.port}) ?\n\n` +
+          'Les associations correspondant → entrée qui en dépendent seront retirées. ' +
+          'Cette action est irréversible.',
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    const response = await fetch(`/api/vmix/connections/${connection.id}`, {
+      method: 'DELETE',
+    })
+    const data = (await response.json()) as {
+      mappingsSupprimes?: number
+      error?: { message?: string }
+    }
+    setBusy(false)
+    if (!response.ok) {
+      setError(data.error?.message ?? 'Suppression refusée.')
+      return
+    }
+    setResult(
+      `Connexion « ${connection.label} » supprimée` +
+        (data.mappingsSupprimes
+          ? ` (${data.mappingsSupprimes} association(s) retirée(s)).`
+          : '.'),
+    )
+    router.refresh()
+  }
+
   async function test(id: string) {
     setBusy(true)
     setError(null)
@@ -119,6 +158,18 @@ export function VmixAdmin({
                 <Button size="sm" variant="secondary" disabled={busy} onClick={() => void test(connection.id)}>
                   <PlugZap size={12} /> Tester
                 </Button>
+                {canManage && (
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    title="Supprimer cette connexion"
+                    aria-label={`Supprimer la connexion ${connection.label}`}
+                    onClick={() => void remove(connection)}
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                )}
               </div>
             }
           >

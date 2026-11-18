@@ -143,8 +143,13 @@ export function ControlRoom(props: ControlRoomProps) {
   }, [participants, may])
 
   // ── Synchronisation ON AIR depuis vMix, si une connexion est déclarée ──────
+  // On propose d'abord une connexion dont le dernier essai a réussi. Pointer
+  // par défaut la première de la liste mettait en avant une connexion en
+  // erreur permanente, et l'opérateur devait s'en apercevoir tout seul.
   const [vmixConnectionId, setVmixConnectionId] = useState<string | null>(
-    props.vmixConnections[0]?.id ?? null,
+    props.vmixConnections.find((c) => c.lastStatus === 'ok')?.id ??
+      props.vmixConnections[0]?.id ??
+      null,
   )
   const [vmixSyncEnabled, setVmixSyncEnabled] = useState(false)
   useEffect(() => {

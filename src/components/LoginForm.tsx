@@ -24,6 +24,10 @@ export function LoginForm() {
       const data = (await response.json()) as { error?: { message?: string } }
       if (!response.ok) {
         setError(data.error?.message ?? 'Connexion refusée.')
+        // Le mot de passe refusé est effacé : le laisser invite à recliquer sur
+        // « Se connecter » sans rien changer, ce qui consomme le quota de
+        // tentatives et finit par verrouiller le compte.
+        setPassword('')
         return
       }
       router.replace('/')

@@ -34,6 +34,14 @@ export function NewProductionForm() {
     }
     setName('')
     setDescription('')
+
+    // On repart vers la liste en désignant l'émission créée : la page la met en
+    // évidence et l'amène à l'écran. Un simple `refresh()` laissait l'écran
+    // identique — l'émission apparaissait en tête de liste pendant que
+    // l'utilisateur regardait le formulaire, et rien ne signalait le succès.
+    const data = (await response.json()) as { production?: { id?: string } }
+    const id = data.production?.id
+    router.push(id ? `/productions?nouvelle=${encodeURIComponent(id)}` : '/productions')
     router.refresh()
   }
 

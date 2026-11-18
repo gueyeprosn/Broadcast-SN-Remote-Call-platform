@@ -49,7 +49,25 @@ chk() {
   else printf '  FAIL %s (attendu "%s", obtenu "%s")\n' "$1" "$2" "$3"; fail=$((fail+1)); fi
 }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-body() { printf '%s' "$1" > "$D/body.json"; printf '%s' "@$D/body.json"; }
+# Écrit un corps JSON dans un fichier et renvoie « @chemin ». Deux raisons :
+#  - éviter l'échappement de guillemets imbriqués dans une substitution de
+#    commande, qui fait redécouper le JSON par le shell ;
+#  - UN FICHIER PAR APPEL. Avec un nom fixe, une variable gardée pour plus tard
+#    pointait sur un contenu entre-temps écrasé par l'appel suivant, et le
+#    serveur recevait le mauvais corps — en silence.
+body() {
+  # `mktemp` et non un compteur : `body` est presque toujours appele dans une
+  # substitution de commande, donc dans un sous-shell, ou un increment de
+  # variable est perdu pour le parent. Le compteur serait reste a 1 et chaque
+  # appel aurait reecrit le meme fichier.
+  # Le gabarit `mktemp` exige que les X terminent le nom : « body-XXXXXX.json »
+  # est refuse par le mktemp de BSD (macOS). On se passe d'extension, curl n'en
+  # a pas besoin.
+  local fichier
+  fichier=$(mktemp "$D/body-XXXXXX")
+  printf '%s' "$1" > "$fichier"
+  printf '%s' "@$fichier"
+}
 j() { python3 -c 'import json,sys
 try: d=json.load(sys.stdin)
 except Exception: print(""); raise SystemExit

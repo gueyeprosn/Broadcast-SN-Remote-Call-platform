@@ -62,9 +62,25 @@ chk() {
   else printf '  FAIL %s (attendu "%s", obtenu "%s")\n' "$1" "$2" "$3"; fail=$((fail+1)); fi
 }
 code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
-# Écrit un corps JSON dans un fichier et le renvoie : évite tout échappement de
-# guillemets imbriqués dans une substitution de commande.
-body() { printf '%s' "$1" > "$D/body.json"; printf '%s' "@$D/body.json"; }
+# Écrit un corps JSON dans un fichier et renvoie « @chemin ». Deux raisons :
+#  - éviter l'échappement de guillemets imbriqués dans une substitution de
+#    commande, qui fait redécouper le JSON par le shell ;
+#  - UN FICHIER PAR APPEL. Avec un nom fixe, une variable gardée pour plus tard
+#    pointait sur un contenu entre-temps écrasé par l'appel suivant, et le
+#    serveur recevait le mauvais corps — en silence.
+body() {
+  # `mktemp` et non un compteur : `body` est presque toujours appele dans une
+  # substitution de commande, donc dans un sous-shell, ou un increment de
+  # variable est perdu pour le parent. Le compteur serait reste a 1 et chaque
+  # appel aurait reecrit le meme fichier.
+  # Le gabarit `mktemp` exige que les X terminent le nom : « body-XXXXXX.json »
+  # est refuse par le mktemp de BSD (macOS). On se passe d'extension, curl n'en
+  # a pas besoin.
+  local fichier
+  fichier=$(mktemp "$D/body-XXXXXX")
+  printf '%s' "$1" > "$fichier"
+  printf '%s' "@$fichier"
+}
 
 j() { python3 -c 'import json,sys
 try: d=json.load(sys.stdin)
@@ -278,6 +294,49 @@ chk "les connexions refusees sont journalisees" ok "$(psql -tAc "SELECT count(*)
 chk "les revocations sont journalisees" ok "$(psql -tAc "SELECT count(*) FROM \"AuditLog\" WHERE action LIKE '%revoke%'" | tr -d ' ' | python3 -c "import sys;print('ok' if int(sys.stdin.read())>0 else 'aucune')")"
 chk "le journal ne contient aucun jeton en clair" ok "$(psql -tAc "SELECT count(*) FROM \"AuditLog\" WHERE detail::text LIKE '%$TOKEN%'" | tr -d ' ' | sed 's/^0$/ok/')"
 chk "les evenements de connexion sont enregistres" ok "$(psql -tAc "SELECT count(*) FROM \"ConnectionEvent\" WHERE \"sessionId\"='$SESS_ID'" | tr -d ' ' | python3 -c "import sys;print('ok' if int(sys.stdin.read())>=3 else 'aucun')")"
+
+echo "── 16. Ranger et supprimer"
+# Archiver est l'operation de rangement : reversible, rien n'est perdu.
+# Supprimer n'est offert que pour une emission qui n'a jamais porte d'edition.
+
+# a) une emission neuve, sans aucune edition : supprimable.
+VIDE_ID=$(curl -s -b "$J" -X POST -H 'Content-Type: application/json' --data-binary '{"name":"Emission jamais utilisee"}' $B/api/productions | j production.id)
+chk "emission sans edition : suppression acceptee" 200 "$(code -b "$J" -X DELETE $B/api/productions/$VIDE_ID)"
+chk "elle a bien disparu" "0" "$(psql -tAc "SELECT count(*) FROM \"Production\" WHERE id='$VIDE_ID'")"
+
+# b) l'emission de cette campagne porte une edition : suppression refusee.
+RESP=$(curl -s -w '\n%{http_code}' -b "$J" -X DELETE $B/api/productions/$PROD_ID)
+chk "emission avec edition : suppression refusee" 409 "$(printf '%s' "$RESP" | tail -1)"
+chk "le refus oriente vers l'archivage" ok "$(printf '%s' "$RESP" | head -1 | grep -qi 'archiv' && echo ok || echo vague)"
+
+# c) archivage refuse tant qu'une edition est en cours ou preparee.
+ARCH_ON=$(body '{"isArchived":true}')
+PREP_ID=$(curl -s -b "$J" -X POST -H 'Content-Type: application/json' --data-binary "$(body '{"name":"Edition encore ouverte"}')" $B/api/productions/$PROD_ID/sessions | j session.id)
+RESP=$(curl -s -w '\n%{http_code}' -b "$J" -X PATCH -H 'Content-Type: application/json' --data-binary "$ARCH_ON" $B/api/productions/$PROD_ID)
+chk "archivage refuse si une edition est ouverte" 409 "$(printf '%s' "$RESP" | tail -1)"
+chk "le refus compte les editions concernees" ok "$(printf '%s' "$RESP" | head -1 | grep -qiE 'en cours|prepar' && echo ok || echo vague)"
+
+# d) une fois l'edition terminee, l'archivage passe.
+code -b "$J" -X POST -H 'Content-Type: application/json' --data-binary '{"action":"end"}' $B/api/sessions/$PREP_ID/state >/dev/null
+chk "archivage accepte apres la fin des editions" 200 "$(code -b "$J" -X PATCH -H 'Content-Type: application/json' --data-binary "$ARCH_ON" $B/api/productions/$PROD_ID)"
+chk "l'emission est marquee archivee" "t" "$(psql -tAc "SELECT \"isArchived\" FROM \"Production\" WHERE id='$PROD_ID'")"
+chk "ses editions sont conservees" ok "$(psql -tAc "SELECT count(*) FROM \"Session\" WHERE \"productionId\"='$PROD_ID'" | python3 -c "import sys;print('ok' if int(sys.stdin.read())>0 else 'perdues')")"
+chk "desarchivage accepte" 200 "$(code -b "$J" -X PATCH -H 'Content-Type: application/json' --data-binary "$(body '{"isArchived":false}')" $B/api/productions/$PROD_ID)"
+
+# e) autorisations.
+chk "archivage refuse a un anonyme" 401 "$(code -X PATCH -H 'Content-Type: application/json' --data-binary "$ARCH_ON" $B/api/productions/$PROD_ID)"
+chk "suppression refusee a un anonyme" 401 "$(code -X DELETE $B/api/productions/$PROD_ID)"
+chk "emission inexistante -> 404" 404 "$(code -b "$J" -X DELETE $B/api/productions/cm00000000000000000000000)"
+
+# f) connexion vMix : suppression.
+VM_DEL=$(curl -s -b "$J" -X POST -H 'Content-Type: application/json' --data-binary '{"label":"A supprimer","host":"10.1.2.3","port":8099,"mode":"AGENT"}' $B/api/vmix/connections | j connection.id)
+chk "connexion vMix creee pour l'essai" ok "$([ -n "$VM_DEL" ] && echo ok || echo echec)"
+chk "suppression refusee a un anonyme" 401 "$(code -X DELETE $B/api/vmix/connections/$VM_DEL)"
+chk "suppression acceptee" 200 "$(code -b "$J" -X DELETE $B/api/vmix/connections/$VM_DEL)"
+chk "la connexion a disparu" "0" "$(psql -tAc "SELECT count(*) FROM \"VmixConnection\" WHERE id='$VM_DEL'")"
+chk "connexion inexistante -> 404" 404 "$(code -b "$J" -X DELETE $B/api/vmix/connections/cm00000000000000000000000)"
+
+chk "les rangements sont journalises" ok "$(psql -tAc "SELECT count(*) FROM \"AuditLog\" WHERE action IN ('production.archive','production.delete','vmix.connection.delete')" | tr -d ' ' | python3 -c "import sys;print('ok' if int(sys.stdin.read())>=3 else 'incomplet')")"
 
 echo
 printf 'RESULTAT : %s reussis, %s echoues\n' "$pass" "$fail"

@@ -4,9 +4,15 @@ import { HttpError, type AuthedUser } from '@/server/auth/guard'
 import { audit } from './audit'
 import type { QualityProfile } from '@/generated/prisma/enums'
 
-export async function listProductions(user: AuthedUser) {
+export async function listProductions(
+  user: AuthedUser,
+  options: { archived?: boolean } = {},
+) {
   // Un réalisateur voit les productions dont il est propriétaire ; un admin voit tout.
-  const where = user.role === 'ADMIN' ? { isArchived: false } : { isArchived: false, ownerId: user.id }
+  const where = {
+    isArchived: options.archived === true,
+    ...(user.role === 'ADMIN' ? {} : { ownerId: user.id }),
+  }
   return db.production.findMany({
     where,
     orderBy: { updatedAt: 'desc' },
@@ -19,6 +25,16 @@ export async function listProductions(user: AuthedUser) {
         take: 3,
         select: { id: true, name: true, state: true, scheduledAt: true },
       },
+    },
+  })
+}
+
+/** Nombre d'émissions rangées, pour n'afficher le lien que s'il mène quelque part. */
+export async function countArchivedProductions(user: AuthedUser): Promise<number> {
+  return db.production.count({
+    where: {
+      isArchived: true,
+      ...(user.role === 'ADMIN' ? {} : { ownerId: user.id }),
     },
   })
 }

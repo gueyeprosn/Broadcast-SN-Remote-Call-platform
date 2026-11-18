@@ -211,7 +211,16 @@ export function CorrespondentCard({
           </Button>
         )}
 
-        <Button size="sm" variant="ghost" onClick={copyVmixLink} title={participant.vmixUrl}>
+        {/* `title` porte l'URL pour la relire au survol, mais `aria-label` dit
+            ce que FAIT le bouton : sans lui, un lecteur d'écran annonçait
+            l'URL entière en guise de nom. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={copyVmixLink}
+          title={participant.vmixUrl}
+          aria-label={`Copier le lien vMix de ${participant.displayName}`}
+        >
           {copied ? <Check size={12} className="text-ok" /> : <Copy size={12} />}
           Lien vMix
         </Button>
